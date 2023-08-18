@@ -1,0 +1,54 @@
+name: Enviar Pull Request Automaticamente
+
+on:
+  pull_request:
+    types: 
+      - closed
+    branches:
+      - main
+
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    name: Syncing branches
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 12
+          
+      - name: Obter nome da branch do PR
+        run: |
+          pr_branch=${GITHUB_HEAD_REF}
+          echo "Branch do PR: $pr_branch"
+          
+      - name: Obter nome da branch
+        run: |
+          # Extrair apenas o nome da branch da variável GITHUB_REF
+          branch_name=${GITHUB_REF#refs/heads/}
+          echo "Branch corrente: $branch_name"
+
+      - name: Get Branches Work of Repo
+        id: getBranches
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const response = await github.repos.listBranches({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            
+            const branches = response.data.map(branch => branch.name).filter(branche => branche != 'main' && branche != 'develop');
+            core.setOutput('BRANCHES', branches.join(','));
+            
+      - name: Create Pull Requests for Branches Work of Repo
+        env:
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        run: |
+          branches=$(echo "${{ steps.getBranches.outputs.BRANCHES }}" | tr ',' '\n')
+          for branch in $branches; do
+            gh pr create --base $branch --head main --title "Atualização da branch $branch" --body "Essa é uma atualização automática da branch $branch."
+          done
